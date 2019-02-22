@@ -1,5 +1,9 @@
-# Project Binaries
+# Project Binaries and Files
 split
+cache/
+
+### Python ###
+__pycache__/
 
 ### C ###
 # Prerequisites
