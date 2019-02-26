@@ -3,7 +3,10 @@
 #include <stdlib.h>
 #include <pthread.h>
 #include <string.h>
+#include <sys/stat.h>
 #include "split.h"
+#include "merge.h"
+
 #define SIZE 1024
 
 static size_t buffer_size = SIZE;
@@ -52,7 +55,7 @@ static long get_file_size(char *file_name) {
   fseek(file, 0L, SEEK_SET);
   fseek(file, 0L, SEEK_END);
   size = ftell(file);
-  printf("\nFile size: %ld bytes\n", size);
+  // printf("\nFile size: %ld bytes\n", size);
   fseek(file, 0L, SEEK_SET);
   fclose(file);
 
@@ -64,14 +67,19 @@ void * create_segment(void *arg) {
   size_t bytes;
   long total = segment_data->start_index;
   char buffer[buffer_size % 2048]; // Max buffer size set to 2KB.
-  char output[100], postfix[3];
+  char output[100], postfix[8];
   FILE *file = fopen(segment_data->file_name, "r");
 
-  strcpy(output, segment_data->file_name);
+  if(mkdir("./cache", 0700)) {
+  }
+  strcpy(output, "./cache/");
+  strcat(output, segment_data->file_name);
 
   // Converting segment id to String
   itoa(segment_data->id, postfix, 10);
 
+  // sprintf(output, "%s_%s", segment_data->file_name, postfix);
+  
   // Prepending a '_' character before the postfix segment number
   char temp = postfix[0];
   postfix[0] = '_';
@@ -87,9 +95,25 @@ void * create_segment(void *arg) {
   printf("Writing segment %d: %ld to %ld\n", segment_data->id, segment_data->start_index, segment_data->end_index);
   while((bytes = fread(buffer, 1, buffer_size, file))) {
     total = total + bytes;
-    fwrite(buffer, 1, bytes, segment);
-    if(total >= (segment_data->end_index))
+    // fwrite(buffer, 1, bytes, segment);
+    if(total >= (segment_data->end_index)) {
+      fwrite(buffer, 1, bytes - (total - segment_data->end_index), segment);
+      fflush(segment);
+      if(segment_data->end_index == get_file_size(segment_data->file_name)) {
+        char td_file_name[100];
+        strcpy(td_file_name, segment_data->file_name);
+        strcat(td_file_name, ".td");
+        FILE *td_file = fopen(td_file_name, "w");
+        fprintf(td_file, "%s\n", segment_data->file_name);
+        fprintf(td_file, "%d\n", segment_data->id + 1);
+        fprintf(td_file, "%ld\n", segment_data->end_index);
+        fclose(td_file);
+      }
       break;
+    }
+    fwrite(buffer, 1, bytes, segment);
+    fflush(segment);
+    
   }
 
   fclose(file);
@@ -142,8 +166,14 @@ void split(char *input, unsigned pieces, size_t buf_size) {
 }
 
 int main(int args, char **argv) {
-  if(args < 3)
-    fprintf(stderr, "%s\n", "USAGE: split <file> <pieces> [buffer_size]");
+  if(args < 3) {
+    fprintf(stderr, "%s\n", "USAGE:");
+    fprintf(stderr, "%s\n\n", "For splitting\n\tsplit <file> <pieces> [buffer_size]");
+    fprintf(stderr, "%s\n", "For merging\n\tsplit -m <td file>");
+  }
+  else if(strcmp(argv[1], "-m") == 0) {
+    merge(argv[2]);
+  }
   else if(args == 3)
     split(argv[1], atoi(argv[2]), 0);
   else
