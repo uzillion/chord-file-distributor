@@ -2,7 +2,7 @@
 all: split
 
 split:
-	gcc -Wall split.c merge.c -o split -pthread
+	gcc -Wall ./deps/split.c ./deps/merge.c -o split -pthread
 
 .PHONY: clean
 clean:
