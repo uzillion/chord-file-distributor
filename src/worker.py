@@ -1,11 +1,10 @@
 from threading import Thread
 from address import Address
 import socket
-from state import lock
 import sys
 M = 20
 
-def in_range(a, b, c, start=False, end=True):
+def in_range(a, b, c, start=False, end=False):
   bla = None
   alc = None
   if start:
@@ -48,11 +47,16 @@ class Worker(Thread):
     finally:
       self.conn.close()
 
-  def send(self, ip, port, data):
+  def send(self, remote_addr, data):
+    ip, port = remote_addr.ip, remote_addr.port
     s = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
     s.connect((ip, int(port)))
     s.sendall(data.encode())
     return s
+
+  def ping(self):
+    print('ping called')
+    self.conn.sendall('Runing on {}:{}'.format(self.state.ip, self.state.port).encode())
 
   def create_ring(self):
     self.state.successor = self.state.local_address
@@ -62,7 +66,7 @@ class Worker(Thread):
   def join(self, ip, port):
     print('joining {}:{}'.format(ip, port))
     try:
-      s = self.send(ip, port, 'find_successor {} {}'.format(self.state.ip, self.state.port))
+      s = self.send(Address(ip, port), 'find_successor {} {}'.format(self.state.ip, self.state.port))
       data = s.recv(1024).decode('utf-8')
       successor_ip, successor_port = data.split(':')
       self.state.successor = Address(successor_ip, successor_port)
@@ -76,9 +80,15 @@ class Worker(Thread):
       raise TypeError('Ha!')
       # print(e)
 
-  def find_successor(self, ip, port):
+  def get_successor(self):
+    self.conn.sendall('{}:{}'.format(self.state.successor.ip, self.state.successor.port).encode())
+
+  def get_predecessor(self):
+    self.conn.sendall('{}:{}'.format(self.state.predecessor.ip, self.state.predecessor.port).encode())
+
+  def find_successor(self, ip=None, port=None):
     id = get_hash('{}:{}'.format(ip, port))
-    if in_range(id, self.state.local_address.__hash__(), self.state.finger[0]):
+    if in_range(id, self.state.local_address.__hash__(), self.state.finger[0], end=True):
       n_ = self.state.finger[0]
       n_ip = self.state.addr_dict[str(n_)].ip
       n_port = self.state.addr_dict[str(n_)].port
@@ -87,37 +97,39 @@ class Worker(Thread):
       n_ = self.closest_preceding_node(id)
       n_ip = self.state.addr_dict[str(n_)].ip
       n_port = self.state.addr_dict[str(n_)].port
-      s = self.send(n_ip, n_port, 'find_successor {} {}'.format(ip, port))
+      s = self.send(Address(n_ip, n_port), 'find_successor {} {}'.format(ip, port))
       self.conn.sendall(s.recv(1024))
 
   def closest_preceding_node(self, id):
     for i in range(M, 0, -1):
-      if in_range(self.state.finger[i], self.state.local_address.__hash__(), id, end=False):
+      if in_range(self.state.finger[i], self.state.local_address.__hash__(), id):
         return self.state.finger[i]
     return self.state.local_address.__hash__()
 
-  # def stabilize(self):
-  #   try:
-  #     s = self.send(self.successor, 'get_predecessor')
-  #     ip, port = s.recv(1024).decode('utf-8').split(':')
-  #     x = Address(ip, port)
-  #     if in_range(x.__hash__(), self.local_address.__hash__(), self.successor.__hash__()):
-  #       self.successor = x
-  #     s.sendall('notify {} {}'.format(self.local_address.ip, self.local_address.port).encode())
-  #   except Exception as e:
-  #     print("Error sending request")
-  #     print(e)
-  #   finally:
-  #     s.close()
-
-  # def get_predecessor
+  def stabilize(self):
+    s = self.send(self.state.successor, 'get_predecessor')
+    x_ip, x_port = s.recv(1024).decode('utf-8').split(':')
+    s.close()
+    x = Address(x_ip, x_port)
+    if in_range(x.__hash__(), self.state.local_address.__hash__(), self.state.successor.__hash__()):
+      self.state.successor = x
+    self.send(self.state.successor, 'notify {} {}'.format(self.state.ip, self.state.port))
 
   def notify(self, ip, port):
-    pass
-  
+    n_ = Address(ip, port)
+    if self.state.predecessor == None or\
+       in_range(n_.__hash__(), self.state.predecessor.__hash__(), self.state.local_address.__hash__()):
+      self.state.predecessor = n_   
+
+  def fix_finger(self):
+    self.state.lock.acquire()
+    self.state.i = self.state.i + 1
+    if self.state.i > M:
+      self.state.i = 1
+    # s = self.send(self.state.local_address, 'find_successor {}'.format
+    
+
   def distribute(self, file):
     pass
 
-  def refreshFingerTable(self):
-    pass
 

@@ -1,10 +1,10 @@
-#!/usr/bin/python3
+#!/usr/local/bin/python
 import socket
-from threading import Lock
-from address import Address, M
 from worker import Worker
 from state import State
 import sys
+import os
+import subprocess
 
 class Node:
     # ip = socket.gethostbyname(socket.gethostname())
@@ -16,7 +16,9 @@ class Node:
     # local_address = Address(ip, port)
 
   def start(port=8000):
+    # os.environ['PORT'] = str(port)
     state_ = State(port)
+    # subprocess.run(['', 'export', 'IP={}'.format(state_.ip)])
     s = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
     s.bind((state_.ip, port))
     s.listen()
