@@ -157,6 +157,18 @@ class Worker(Thread):
     self.state.finger[self.state.i] = n.__hash__()
     self.state.lock.release()
 
+  def check_predecessor(self):
+    try:
+      s = send(self.state.predecessor, 'ping')
+      response = s.recv(1024)
+      if not response[:7] == 'Running':
+        print("Failed to get response from predecessor")
+        self.state.predecessor = None
+    except:
+      print("Failed to get response from predecessor")
+      self.state.predecessor = None
+      
+
   def distribute(self, file):
     pass
 
