@@ -10,7 +10,6 @@ from log import Log
 class Temp:
     NUM_SERVERS = 5
     HEARTBEAT_PERIOD = 1  # in seconds
-    servers = []
 
 # Represents a request from a client.
 class Request:
@@ -38,8 +37,7 @@ class RaftServer:
         self.last_applied = 0   # index of highest log entry applied
                                 # to state machine
 
-        # Volatile state on a leader.
-        # (Reinitialized after election.)
+        # Volatile state on a leader. (Reinitialized after election.)
         # for each server, index of next log
         # entry to send to that server:
         self.next_index = []
@@ -48,10 +46,12 @@ class RaftServer:
         self.match_index = []
         
         self.state = self.State.FOLLOWER
+        self.heartbeat_thread = None
 
-        # Start heartbeat thread.
-        self.heartbeat_thread = Thread(target=self.__send_heartbeat)
-        self.heartbeat_thread.start()
+    def __del__(self):=
+        if self.heartbeat_thread != None:
+            self.state = self.State.FOLLOWER  # kills thread
+            self.heartbeat_thread.join()  # wait for thread to die
 
     class State(Enum):
         FOLLOWER = 1
@@ -62,12 +62,11 @@ class RaftServer:
     # If leader, sends heartbeat to all followers,
     # then wait until must send next heartbeat.
     def __send_heartbeat(self):
-        while True:
-            if self.state == self.State.LEADER:
-                # for each follower
-                    # send empty AppendEntries RPC
-                print("u make mah heart beat")
-                time.sleep(Temp.HEARTBEAT_PERIOD)
+        while self.state == self.State.LEADER:
+            # for each follower
+                # send empty AppendEntries RPC
+            print("Thread id={} sending heartbeat".format(self.id))
+            time.sleep(Temp.HEARTBEAT_PERIOD)
 
     # Called if no communication from leader and
     # election timeout reached.
@@ -78,10 +77,20 @@ class RaftServer:
         # send Requestvote RPCs to all other servers
 
     def __become_leader(self):
-        self.state = RaftServerState.LEADER
+        self.state = self.State.LEADER
         initial_next_index = self.last_applied + 1
         self.next_index = [initial_next_index] * Temp.NUM_SERVERS
         self.match_index = [0] * Temp.NUM_SERVERS
+
+        # Start heartbeat thread.
+        self.heartbeat_thread = Thread(target=self.__send_heartbeat)
+        self.heartbeat_thread.start()
+
+    def __become_follower(self):
+        self.state = self.State.FOLLOWER
+        self.heartbeat_thread.join()
+        self.heartbeat_thread = None
+        # TODO: what else?
 
     def __handle_request(self, request):
         self.log.append(self.current_term, request.command)
@@ -118,10 +127,16 @@ class RaftServer:
 
     # TODO: remove
     def make_leader(self):
-        self.state = self.State.LEADER
+        self.__become_leader()
     def make_follower(self):
-        self.state = self.State.FOLLOWER
+        self.__become_follower()
 
-def test_run():
-    for i in range(Temp.NUM_SERVERS):
-        Temp.servers.append(RaftServer(i))
+class RaftServerTest:
+    servers = []
+    def __init__(self):
+        for i in range(Temp.NUM_SERVERS):
+            self.servers.append(RaftServer(i))
+
+    def print_states(self):
+        for i in range(Temp.NUM_SERVERS):
+            print(self.servers[i].state)
