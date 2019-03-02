@@ -16,7 +16,7 @@ class Node:
     # local_address = Address(ip, port)
 
   def start(port=8000):
-    # os.environ['PORT'] = str(port)
+    os.environ['PORT'] = str(port)
     state_ = State(port)
     # subprocess.run(['', 'export', 'IP={}'.format(state_.ip)])
     s = socket.socket(socket.AF_INET, socket.SOCK_STREAM)

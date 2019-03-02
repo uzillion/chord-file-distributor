@@ -1,16 +1,40 @@
 version: "3"
 services:
-  web:
-    image: paulinalei/simpleapp:1.0
+  n1:
+    image: taco:latest
     deploy:
-      replicas: 5
-      resources:
-        limits:
-          cpus: "0.1"
-          memory: 50M
       restart_policy:
         condition: on-failure
     networks:
       - webnet
+    ports:
+      - "8000:8000"
+  n2:
+    image: taco:latest
+    deploy:
+      restart_policy:
+        condition: on-failure
+    networks:
+      - webnet
+    ports:
+      - "7000:7000"
+  n3:
+    image: taco:latest
+    deploy:
+      restart_policy:
+        condition: on-failure
+    networks:
+      - webnet
+    ports:
+      - "6000:6000"
+  n4:
+    image: taco:latest
+    deploy:
+      restart_policy:
+        condition: on-failure
+    networks:
+      - webnet
+    ports:
+      - "5000:5000"
 networks:
   webnet:
