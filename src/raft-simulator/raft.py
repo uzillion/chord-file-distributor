@@ -89,25 +89,34 @@ class RaftServer:
         # Keep spinning UNTIL either:
         # a) election timeout 
         # b) got majority vote
+        while (not self.__got_majority_vote() and
+            self.leader_id == self.NO_LEADER):
+            pass
+        print("Thread {} broke out candidate loop".format(self.id))
 
-
-        if self.__got_majority_vote():
+        if self.__got_majority_vote():  # this server was elected
             self.__become_leader()
+        elif self.leader_id != self.NO_LEADER:  # other server was elected
+            self.__become_follower()
         else:  # timed out
-            self.__start_election()  # but then this thread will kill itself
+            self.__start_election()
+
+    def __become_candidate(self):
+        print("Thread {} has become candidate".format(self.id))
+        # Start candidate thread.
+        self.candidate_thread = Thread(target=self.__start_election)
+        self.candidate_thread.start()
 
     # Called if no communication from leader and
     # election timeout reached.
     def __start_election(self):
         self.current_term += 1
         self.num_votes = 0
-        assert(self.state != self.State.Leader)  # can't start election if was Leader
+        assert(self.state != self.State.LEADER)  # can't start election if was Leader
         self.state = self.State.CANDIDATE
         self.voted_for = self.id
-
-        # Start candidate thread.
-        self.candidate_thread = Thread(target=self.__request_votes)
-        self.candidate_thread.start()
+        self.leader_id = self.NO_LEADER
+        self.__request_votes()
 
     # For heartbeat thread.
     # If leader, sends heartbeat to all followers,
@@ -125,12 +134,13 @@ class RaftServer:
                         prev_log_index, self.log.get(prev_log_index).term,
                         [],  # because heartbeat
                         self.commit_index)
-                    print("Thread {}: thread {} sent {} back to me".format(
-                        self.id, i, response))
+                    # print("Thread {}: thread {} sent {} back to me".format(
+                        # self.id, i, response))
             # print("Thread id={} sending heartbeat".format(self.id))
             time.sleep(Temp.HEARTBEAT_PERIOD)
 
     def __become_leader(self):
+        print("Thread {} has become leader".format(self.id))
         self.state = self.State.LEADER
         initial_next_index = self.last_applied + 1
         self.next_index = [initial_next_index] * Temp.NUM_SERVERS
@@ -141,9 +151,11 @@ class RaftServer:
         self.heartbeat_thread.start()
 
     def __become_follower(self):
+        print("Thread {} has become follower".format(self.id))
         self.state = self.State.FOLLOWER
-        self.heartbeat_thread.join()
-        self.heartbeat_thread = None
+        if self.heartbeat_thread != None:  # kill heartbeat thread (if any)
+            self.heartbeat_thread.join()
+            self.heartbeat_thread = None
         # TODO: what else?
 
     def __handle_request(self, request):
@@ -153,10 +165,10 @@ class RaftServer:
     # @request must be instance of Request.
     def handle_request(self, request):
         if self.state == RaftServerState.LEADER:
-            print("Thread {} handling request".format(self.id))
+            # print("Thread {} handling request".format(self.id))
             self.__handle_request(request)
         else:
-            assert(self.leader_id != NO_LEADER)
+            assert(self.leader_id != self.NO_LEADER)
             Temp.servers[self.leader_id].handle_request(request)
 
     # Invoked by the leader on other raft servers to replicate
@@ -167,7 +179,7 @@ class RaftServer:
     def append_entries_RPC(self, term, leader_id, prev_log_index,
                            prev_log_term, entries,
                            leader_commit):
-        print("Thread {} handling AppendEntries RPC".format(self.id))
+        # print("Thread {} handling AppendEntries RPC".format(self.id))
 
         if self.id == leader_id:  # if leader sent RPC to itself
             raise AssertionError("Leader sent AppendEntries RPC to itself")
@@ -181,6 +193,10 @@ class RaftServer:
         # if leader_commit > self.commit_index:
             # self.commit_index = min(leader_commit, (index of last new entry))
         
+        if self.leader_id == self.NO_LEADER:  # if hasn't acknowledged this leader
+            self.leader_id = leader_id
+            # if self.state != self.State.FOLLOWER:
+            #     self.__become_follower()
         return (self.current_term, True)
 
     # Invoked by candidates on other raft servers to gather votes.
@@ -198,17 +214,21 @@ class RaftServer:
         self.__become_leader()
     def make_follower(self):
         self.__become_follower()
+    def make_candidate(self):
+        self.__become_candidate()
     def leader_die(self):
         self.__become_follower()  # stop sending heartbeats
+    def add_vote(self):
+        self.num_votes += 1
 
 class RaftServerTest:
     def __init__(self):
         for i in range(Temp.NUM_SERVERS):
             Temp.servers.append(RaftServer(i))
-        Temp.servers[2].make_leader()
+        # Temp.servers[2].make_leader()
 
     def print_states(self):
         for i in range(Temp.NUM_SERVERS):
-            print("====== Thread {} ======".format(self.id))
-            print(Temp.servers[i].state)
-            print(Temp.servers[i].current_term)
+            print("====== Thread {} ======".format(i))
+            print("State: ", Temp.servers[i].state)
+            print("Current term: ", Temp.servers[i].current_term)
