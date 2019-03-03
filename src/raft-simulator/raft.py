@@ -54,8 +54,10 @@ class RaftServer:
 
         self.leader_id = self.NO_LEADER
         
+        self.num_votes = 0  # votes for this candidate
         self.state = self.State.FOLLOWER
-        self.heartbeat_thread = None
+        self.heartbeat_thread = None  # for leader to assert authority
+        self.candidate_thread = None  # for candidate to grab votes
         self.election_timeout = 100  # random number for now
 
     def __del__(self):
@@ -67,6 +69,45 @@ class RaftServer:
         FOLLOWER = 1
         CANDIDATE = 2
         LEADER = 3
+
+    def __got_majority_vote(self):
+        return self.num_votes > Temp.NUM_SERVERS / 2
+
+    def __request_votes(self):
+        # Send out vote requests.
+        # TODO: reset election timer
+        # TODO: select new randomized election timeout
+        # send Requestvote RPCs to all other servers:
+        # for i in range(Temp.NUM_SERVERS):
+        #     if i != self.id:
+        #         response = Temp.servers[i].request_vote_RPC(
+        #             self.current_term, self.id, self.log.size()-1,
+        #             self.log.latest())
+        #         print("Thread {}: thread {} sent {} back to me".format(
+        #             self.id, i, response))
+
+        # Keep spinning UNTIL either:
+        # a) election timeout 
+        # b) got majority vote
+
+
+        if self.__got_majority_vote():
+            self.__become_leader()
+        else:  # timed out
+            self.__start_election()  # but then this thread will kill itself
+
+    # Called if no communication from leader and
+    # election timeout reached.
+    def __start_election(self):
+        self.current_term += 1
+        self.num_votes = 0
+        assert(self.state != self.State.Leader)  # can't start election if was Leader
+        self.state = self.State.CANDIDATE
+        self.voted_for = self.id
+
+        # Start candidate thread.
+        self.candidate_thread = Thread(target=self.__request_votes)
+        self.candidate_thread.start()
 
     # For heartbeat thread.
     # If leader, sends heartbeat to all followers,
@@ -88,20 +129,6 @@ class RaftServer:
                         self.id, i, response))
             # print("Thread id={} sending heartbeat".format(self.id))
             time.sleep(Temp.HEARTBEAT_PERIOD)
-
-    # Called if no communication from leader and
-    # election timeout reached.
-    def __start_election(self):
-        self.current_term += 1
-        assert(self.state != self.State.Leader)  # can't start election if was Leader
-        self.state = self.State.CANDIDATE
-        self.voted_for = self.id
-        # reset election timer
-        # select new randomized election timeout
-        # send Requestvote RPCs to all other servers:
-        for i in range(Temp.NUM_SERVERS):
-            if i != self.id:
-                pass
 
     def __become_leader(self):
         self.state = self.State.LEADER
@@ -159,18 +186,20 @@ class RaftServer:
     # Invoked by candidates on other raft servers to gather votes.
     def request_vote_RPC(term, candidate_id, last_log_index,
                          last_log_term):
-        if term < self.current_term:
+        if term < self.current_term:  # requester's log is out of date
             return (self.current_term, False)
-        # TODO: #2, etc
-        return (self.current_term, True)
+        if self.voted_for == None or self.voted_for == candidate_id:
+            return (self.current_term, True)
+        else:  # already voted for somene else
+            return (self.current_term, False)
 
     # TODO: remove
     def make_leader(self):
         self.__become_leader()
     def make_follower(self):
         self.__become_follower()
-    def leader_delay(self):
-        pass
+    def leader_die(self):
+        self.__become_follower()  # stop sending heartbeats
 
 class RaftServerTest:
     def __init__(self):

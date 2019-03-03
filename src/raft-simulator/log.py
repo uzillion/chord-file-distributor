@@ -15,6 +15,10 @@ class Log:
         assert(index >= 0)
         return self.entries[index]
 
+    # Returns latest entry.
+    def latest(self):
+        return self.entries[-1]
+
     def size(self):
         return self.len()
     def length(self):
