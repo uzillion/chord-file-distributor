@@ -4,8 +4,13 @@ import os
 import sys
 import socket
 import math
+import hashlib as h
 from address import Address
+from state import M
 # from address import Address
+
+def get_hash(str_):
+    return int(h.sha1(str_.encode()).hexdigest(), 16) % (2**M)
 
 LOCAL_IP = socket.gethostbyname(socket.gethostname())
 LOCAL_PORT = int(os.environ['PORT'])
@@ -90,7 +95,7 @@ elif request == 'disperse':
       if i >= n_segments-1:
         n_bytes = size - start
       sock.sendall('send_segment {} {} {} {}'.format(file_, i, start, n_bytes).encode())
-      print(sock.recv(1024).decode('utf-8'))
+      print('{}/{}'.format(sock.recv(1024).decode('utf-8'), get_hash(pfile_+'_'+str(i))))
       sock.close()
     f = open('./{}.td'.format(pfile_), 'w')
     f.write('{}\n{}\n{}\n'.format(pfile_, size, n_segments))

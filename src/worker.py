@@ -4,6 +4,7 @@ import socket
 import sys
 from state import M
 import time
+import hashlib as h
 
 CACHE_DIR = './cache'
 
@@ -24,8 +25,8 @@ def in_range(a, b, c, start=False, end=False):
 	  return bla and alc
   return bla or alc
 
-def get_hash(str):
-    return int( bin( hash(str) )[:M], 2)
+def get_hash(str_):
+    return int(h.sha1(str_.encode()).hexdigest(), 16) % (2**M)
 
 class Worker(Thread):
   def __init__(self, peer, state):
@@ -102,12 +103,13 @@ class Worker(Thread):
     except:
       return 'None'
 
-  def get_hash(self):
+  def get_hash(self, str_=None):
+    if str_ != None:
+      return str(get_hash(str))
     return str(self.state.id)
 
   def find_successor(self, id):
     id = int(id)
-    # id = get_hash('{}:{}'.format(ip, port))
     if in_range(id, self.state.id, self.state.finger[0], end=True):
       n_ = self.state.finger[0]
       n_ip = self.state.addr_dict[str(n_)].ip
@@ -122,8 +124,11 @@ class Worker(Thread):
 
   def closest_preceding_node(self, id):
     for i in range(M-1, 0, -1):
-      if in_range(self.state.finger[i], self.state.id, id):
-        return self.state.finger[i]
+      # Lazy check. 
+      # Should implement a pointer to point to the last entry in table
+      if self.state.finger[i]:
+        if in_range(self.state.finger[i], self.state.id, id):
+          return self.state.finger[i]
     return self.state.id
 
   def stabilize(self):
@@ -134,7 +139,9 @@ class Worker(Thread):
       x = Address(x_ip, x_port)
       if in_range(x.__hash__(), self.state.id, self.state.successor.__hash__()):
         self.state.lock.acquire()
+        self.state.finger[0] = x.__hash__()
         self.state.successor = x
+        self.state.addr_dict[str(x.__hash__())] = x
         self.state.lock.release()
     except: pass
     self.send(self.state.successor, 'notify {} {}'.format(self.state.ip, self.state.port)).close()
@@ -152,7 +159,7 @@ class Worker(Thread):
     self.state.i = self.state.i + 1
     if self.state.i > M:
       self.state.i = 1
-    s = self.send(self.state.local_address, 'find_successor {}'.format((self.state.id + pow(2, self.state.i-1)) % M))
+    s = self.send(self.state.local_address, 'find_successor {}'.format((self.state.id + pow(2, self.state.i-1)) % 2**M))
     n_ip, n_port = s.recv(1024).decode('utf-8').split(':')
     n = Address(n_ip, n_port)
     s.close()
@@ -188,7 +195,9 @@ class Worker(Thread):
     f.write(data)
     print('file written')
     f.close()
-    
+
+  def get_finger(self):
+    return str(self.state.finger)
 
   def send_segment(self, file_, seg_id, start, n_bytes):
     seg_name = '{}_{}'.format(file_.split('/')[-1:][0], seg_id)

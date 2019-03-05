@@ -2,7 +2,7 @@ import socket
 from address import Address
 from threading import Lock
 
-M = 20
+M = 30
 
 class State:
   def __init__(self, port=8000):

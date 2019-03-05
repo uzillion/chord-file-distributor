@@ -1,4 +1,4 @@
-M = 20
+M = 30
 import hashlib as h
 
 class Address(object):
@@ -7,7 +7,7 @@ class Address(object):
     self.port = int(port)
 
   def __hash__(self):
-    return int(bin(int(h.sha1('{}:{}'.format(self.ip, self.port).encode()).hexdigest(), 16))[:M], 2)
+    return int(h.sha1('{}:{}'.format(self.ip, self.port).encode()).hexdigest(), 16)%(2**M)
     # return int(bin(hash(("{}:{}".format(self.ip, self.port))))[:M], 2)
     # return hash(("{}:{}".format(self.ip, self.port)))
 

@@ -1,6 +1,8 @@
 # Project Binaries and Files
 split
 cache/
+.todo
+*.td
 
 ### Python ###
 __pycache__/

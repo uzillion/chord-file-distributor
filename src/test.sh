@@ -12,4 +12,4 @@ do
   PORT=5000 python3 taco.py fix_finger
 done  
 
-PORT=8000 python3 taco.py disperse ./cache/IMG_20190101_123952_e.jpg 4
+#PORT=8000 python3 taco.py disperse ./cache/IMG_20190101_123952_e.jpg 4
