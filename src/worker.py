@@ -1,8 +1,8 @@
 from threading import Thread
-from address import Address
+from address import Address, hash_
+from config import M
 import socket
 import sys
-from config import M
 import time
 import hashlib as h
 import os
@@ -25,9 +25,6 @@ def in_range(a, b, c, start=False, end=False):
   if b < c:
 	  return bla and alc
   return bla or alc
-
-def get_hash(str_):
-    return int(h.sha1(str_.encode()).hexdigest(), 16) % (2**M)
 
 class Worker(Thread):
   def __init__(self, peer, state):
@@ -92,6 +89,7 @@ class Worker(Thread):
       return 'successor found to be {}:{}'.format(successor_ip, successor_port)
     except:
       raise Exception()
+    finally:
       return "Error sending request to server"
       # print(e)
 
@@ -106,7 +104,7 @@ class Worker(Thread):
 
   def get_hash(self, str_=None):
     if str_ != None:
-      return str(get_hash(str))
+      return str(hash_(str))
     return str(self.state.id)
 
   def find_successor(self, id):
@@ -214,7 +212,7 @@ class Worker(Thread):
 
   def send_segment(self, file_, seg_id, start, n_bytes):
     seg_name = '{}_{}'.format(file_.split('/')[-1:][0], seg_id)
-    ip, port = self.find_successor(get_hash(seg_name)).split(':')
+    ip, port = self.find_successor(hash_(seg_name)).split(':')
     s = self.send(Address(ip, port), 'store {} {}'.format(seg_name, n_bytes))
     if s.recv(512).decode('utf-8') == 'OK':
       f = open(file_, 'rb+')
@@ -243,7 +241,7 @@ class Worker(Thread):
     chunk = ''.encode()
     for i in range(0, n_segments):
       seg_name = name + '_' + str(i)
-      ip, port = self.find_successor(get_hash(seg_name)).split(':')
+      ip, port = self.find_successor(hash_(seg_name)).split(':')
       s = self.send(Address(ip, port), 'return_segment {}'.format(seg_name))
       seg_size = int(s.recv(1024).decode('utf-8'))
       print('seg_size:', seg_size)

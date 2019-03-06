@@ -21,10 +21,13 @@ if not os.path.isfile('./split'):
 
 s = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
 
-request = sys.argv[1]
-# LOCAL_PORT = int(sys.argv[2])
-args  = sys.argv[2:]
-# print(len(args))
+try:
+  request = sys.argv[1]
+  # LOCAL_PORT = int(sys.argv[2])
+  args  = sys.argv[2:]
+  # print(len(args))
+except:
+  request = ""
 
 def local_request(msg, arg1=None, arg2=None):
   s.connect((LOCAL_IP, LOCAL_PORT))
@@ -132,13 +135,15 @@ elif request[:4] == 'get_':
 
 else:
   print("Invalid Request, please select one of the following:")
-  print("\t-> ping")
-  print("\t-> join")
-  print("\t-> disperse")
+  print("\t-> ping [<ip> <port>]")
+  print("\t-> join [<ip> <port>]")
+  print("\t-> disperse <file> <number of segments>")
+  print("\t-> pull <td file>")
   print("\t-> stabilize")
   print("\t-> fix_finger")
   print("\t-> get_successor")
   print("\t-> get_predecessor")
+  print("\t-> get_finger")
   print("\t-> get_hash")
   
 
