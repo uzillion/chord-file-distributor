@@ -3,6 +3,7 @@ import subprocess
 import os
 import sys
 import socket
+import math
 from address import Address
 # from address import Address
 
@@ -67,6 +68,38 @@ elif request == 'stabilize':
   elif len(args) == 0:
     local_request_s('stabilize')
 
+elif request == 'fix_finger':
+  if len(args) > 1:
+    remote_request_s(request, args[0], args[1])
+  elif len(args) == 0:
+    local_request_s(request)
+
+
+elif request == 'disperse':
+  if len(args) >= 2:
+    file_ = args[0]
+    pfile_ = file_.split('/')[-1:][0]
+    n_segments = int(args[1])
+    size = os.stat(file_).st_size
+    segment_size = math.floor(size/n_segments)
+    for i in range(0, n_segments):
+      sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+      sock.connect((LOCAL_IP, LOCAL_PORT))
+      start = i*segment_size
+      n_bytes = segment_size
+      if i >= n_segments-1:
+        n_bytes = size - start
+      sock.sendall('send_segment {} {} {} {}'.format(file_, i, start, n_bytes).encode())
+      print(sock.recv(1024).decode('utf-8'))
+      sock.close()
+    f = open('./{}.td'.format(pfile_), 'w')
+    f.write('{}\n{}\n{}\n'.format(pfile_, size, n_segments))
+    f.close()
+    print('File distributed successfully')
+  else:
+    print("USAGE disperse <file> <number of segments>")
+
+
 elif request == 'ping':
   if len(args) > 1:
     remote_request_s('ping', args[0], args[1])
@@ -89,7 +122,9 @@ else:
   print("Invalid Request, please select one of the following:")
   print("\t-> ping")
   print("\t-> join")
+  print("\t-> disperse")
   print("\t-> stabilize")
+  print("\t-> fix_finger")
   print("\t-> get_successor")
   print("\t-> get_predecessor")
   print("\t-> get_hash")

@@ -3,6 +3,9 @@ from address import Address
 import socket
 import sys
 from state import M
+import time
+
+CACHE_DIR = './cache'
 
 def in_range(a, b, c, start=False, end=False):
   bla = None
@@ -65,7 +68,7 @@ class Worker(Thread):
   def create_ring(self):
     self.state.successor = self.state.local_address
     # self.state.predecessor = self.state.local_address
-    self.state.finger.insert(0, self.state.id)
+    self.state.finger[0] = self.state.id
     self.state.addr_dict[str(self.state.finger[0])] = self.state.local_address
     return "New ring created"
 
@@ -154,7 +157,8 @@ class Worker(Thread):
     n = Address(n_ip, n_port)
     s.close()
     self.state.addr_dict[str(n.__hash__())] = n
-    self.state.finger[self.state.i] = n.__hash__()
+    self.state.finger[self.state.i-1] = n.__hash__()
+    print("Finger:", self.state.finger)
     self.state.lock.release()
 
   def check_predecessor(self):
@@ -168,8 +172,41 @@ class Worker(Thread):
       print("Failed to get response from predecessor")
       self.state.predecessor = None
       
+  def store(self, seg_name, n_bytes):
+    self.conn.sendall('OK'.encode())
+    chunk = 0
+    data = self.conn.recv(8 * 1024)
+    while True:
+      data += self.conn.recv(8 * 1024)
+      chunk = len(data)
+      if chunk == int(n_bytes):
+        break
+    print('file recieved')
+    self.conn.sendall(str(len(data)).encode())
+    print('writing file')
+    f = open('{}/{}'.format(CACHE_DIR, seg_name), 'wb+')
+    f.write(data)
+    print('file written')
+    f.close()
+    
 
-  def distribute(self, file):
-    pass
+  def send_segment(self, file_, seg_id, start, n_bytes):
+    seg_name = '{}_{}'.format(file_.split('/')[-1:][0], seg_id)
+    ip, port = self.find_successor(get_hash(seg_name)).split(':')
+    s = self.send(Address(ip, port), 'store {} {}'.format(seg_name, n_bytes))
+    if s.recv(512).decode('utf-8') == 'OK':
+      f = open(file_, 'rb+')
+      print("sending file...")
+      s.sendfile(f, int(start), int(n_bytes))
+      print("waiting for ack...")
+      data = s.recv(1024).decode('utf-8')
+      print('ack received')
+      s.close()
+      f.close()
+      return 'segment {}: {} bytes sent, {} recieved'.format(seg_id, n_bytes, data)
+    else:
+      s.close()
+      return 'Error sending segment {} to {}:{}'.format(seg_id, ip, port)
+    
 
 
