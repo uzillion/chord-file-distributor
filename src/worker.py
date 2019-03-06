@@ -2,9 +2,10 @@ from threading import Thread
 from address import Address
 import socket
 import sys
-from state import M
+from config import M
 import time
 import hashlib as h
+import os
 
 CACHE_DIR = './cache'
 
@@ -178,6 +179,18 @@ class Worker(Thread):
     except:
       print("Failed to get response from predecessor")
       self.state.predecessor = None
+
+  def return_segment(self, seg_name):
+    seg_size = os.stat('{}/{}'.format(CACHE_DIR, seg_name)).st_size
+    self.conn.sendall(str(seg_size).encode())
+    ready = self.conn.recv(1024).decode('utf-8')
+    print(ready)
+    if ready == 'READY':
+      f = open('{}/{}'.format(CACHE_DIR, seg_name), 'rb')
+      # print(f)
+      self.conn.sendfile(f, offset=0, count=seg_size)
+    
+
       
   def store(self, seg_name, n_bytes):
     self.conn.sendall('OK'.encode())
@@ -216,6 +229,48 @@ class Worker(Thread):
     else:
       s.close()
       return 'Error sending segment {} to {}:{}'.format(seg_id, ip, port)
+
+  def pull(self, file_):
+    f = open(file_, 'r')
+    file_meta = []
+    for line in f:
+      file_meta.append(line)
+    f.close()
+    name = file_meta[0].replace('\n', '')
+    size = int(file_meta[1].replace('\n', ''))
+    n_segments = int(file_meta[2].replace('\n', ''))
+    data = ''.encode()
+    chunk = ''.encode()
+    for i in range(0, n_segments):
+      seg_name = name + '_' + str(i)
+      ip, port = self.find_successor(get_hash(seg_name)).split(':')
+      s = self.send(Address(ip, port), 'return_segment {}'.format(seg_name))
+      seg_size = int(s.recv(1024).decode('utf-8'))
+      print('seg_size:', seg_size)
+      s.sendall('READY'.encode())
+      # chunk = s.recv(seg_size)
+      # ========= Chunked download downloading extra bytes; 1 byte at time too slow ========#
+      while True:
+        # print(len(data))
+        chunk += s.recv(1)
+        # chunk += s.recv(8 * 1024)
+        if len(chunk) >= seg_size:
+          break
+      #====================================================================================#
+      data += chunk
+      print('{}: {}/{} bytes recieved'.format(seg_name, len(chunk), seg_size))
+      chunk = b''
+      # chunk = len(data)
+      s.close()
+    
+    if len(data) == size:
+      f = open(name, 'wb+')
+      f.write(data)
+      f.close()
+      return 'File pulled successfully'
+    else:
+      return 'Failed to pull file'
+    # print(file_meta)
     
 
 

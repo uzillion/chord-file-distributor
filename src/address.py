@@ -1,5 +1,5 @@
-M = 30
 import hashlib as h
+from config import M
 
 class Address(object):
   def __init__(self, ip, port):

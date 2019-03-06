@@ -79,6 +79,13 @@ elif request == 'fix_finger':
   elif len(args) == 0:
     local_request_s(request)
 
+elif request == 'pull':
+  if  len(args) >= 1:
+    s.connect((LOCAL_IP, LOCAL_PORT))
+    s.sendall('pull {}'.format(args[0]).encode())
+    print(s.recv(1024).decode('utf-8'))
+  else:
+    print('USAGE: pull <td file>')
 
 elif request == 'disperse':
   if len(args) >= 2:
