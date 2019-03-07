@@ -1,6 +1,6 @@
 from threading import Thread
 from address import Address, hash_
-from config import M
+from utils import M, checksum
 import socket
 import sys
 import time
@@ -46,6 +46,8 @@ class Worker(Thread):
       response = getattr(self, request[0])(*request[1:])
       if not response:
         response = 'Operation Completed Successfully'
+      elif response == '#SKIP':
+        response = ''
       self.conn.sendall(response.encode())
     except:
       print('Invalid function')
@@ -62,7 +64,7 @@ class Worker(Thread):
 
   def ping(self):
     print('ping called')
-    return 'Runing on {}:{}'.format(self.state.ip, self.state.port)
+    return 'Running on {}:{}'.format(self.state.ip, self.state.port)
 
   def create_ring(self):
     self.state.successor = self.state.local_address
@@ -187,7 +189,7 @@ class Worker(Thread):
       f = open('{}/{}'.format(CACHE_DIR, seg_name), 'rb')
       # print(f)
       self.conn.sendfile(f, offset=0, count=seg_size)
-    
+    return '#SKIP'   
 
       
   def store(self, seg_name, n_bytes):
@@ -237,6 +239,7 @@ class Worker(Thread):
     name = file_meta[0].replace('\n', '')
     size = int(file_meta[1].replace('\n', ''))
     n_segments = int(file_meta[2].replace('\n', ''))
+    checksum_ = file_meta[3].replace('\n', '')
     data = ''.encode()
     chunk = ''.encode()
     for i in range(0, n_segments):
@@ -246,28 +249,24 @@ class Worker(Thread):
       seg_size = int(s.recv(1024).decode('utf-8'))
       print('seg_size:', seg_size)
       s.sendall('READY'.encode())
-      # chunk = s.recv(seg_size)
-      # ========= Chunked download downloading extra bytes; 1 byte at time too slow ========#
       while True:
-        # print(len(data))
-        chunk += s.recv(1)
-        # chunk += s.recv(8 * 1024)
+        chunk += s.recv(8 * 1024)
         if len(chunk) >= seg_size:
           break
-      #====================================================================================#
       data += chunk
       print('{}: {}/{} bytes recieved'.format(seg_name, len(chunk), seg_size))
       chunk = b''
       # chunk = len(data)
       s.close()
     
-    if len(data) == size:
-      f = open(name, 'wb+')
-      f.write(data)
-      f.close()
+    f = open(name, 'wb+')
+    f.write(data)
+    f.close()
+    if checksum_ == checksum(name):
       return 'File pulled successfully'
     else:
-      return 'Failed to pull file'
+      os.remove(name)
+      return 'Failed to pull file/Corrupted file'
     # print(file_meta)
     
 
