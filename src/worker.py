@@ -1,8 +1,13 @@
 from threading import Thread
-from address import Address
+from address import Address, hash_
+from config import M
 import socket
 import sys
-from state import M
+import time
+import hashlib as h
+import os
+
+CACHE_DIR = './cache'
 
 def in_range(a, b, c, start=False, end=False):
   bla = None
@@ -20,9 +25,6 @@ def in_range(a, b, c, start=False, end=False):
   if b < c:
 	  return bla and alc
   return bla or alc
-
-def get_hash(str):
-    return int( bin( hash(str) )[:M], 2)
 
 class Worker(Thread):
   def __init__(self, peer, state):
@@ -65,7 +67,7 @@ class Worker(Thread):
   def create_ring(self):
     self.state.successor = self.state.local_address
     # self.state.predecessor = self.state.local_address
-    self.state.finger.insert(0, self.state.id)
+    self.state.finger[0] = self.state.id
     self.state.addr_dict[str(self.state.finger[0])] = self.state.local_address
     return "New ring created"
 
@@ -87,6 +89,7 @@ class Worker(Thread):
       return 'successor found to be {}:{}'.format(successor_ip, successor_port)
     except:
       raise Exception()
+    finally:
       return "Error sending request to server"
       # print(e)
 
@@ -99,12 +102,13 @@ class Worker(Thread):
     except:
       return 'None'
 
-  def get_hash(self):
+  def get_hash(self, str_=None):
+    if str_ != None:
+      return str(hash_(str))
     return str(self.state.id)
 
   def find_successor(self, id):
     id = int(id)
-    # id = get_hash('{}:{}'.format(ip, port))
     if in_range(id, self.state.id, self.state.finger[0], end=True):
       n_ = self.state.finger[0]
       n_ip = self.state.addr_dict[str(n_)].ip
@@ -119,8 +123,11 @@ class Worker(Thread):
 
   def closest_preceding_node(self, id):
     for i in range(M-1, 0, -1):
-      if in_range(self.state.finger[i], self.state.id, id):
-        return self.state.finger[i]
+      # Lazy check. 
+      # Should implement a pointer to point to the last entry in table
+      if self.state.finger[i]:
+        if in_range(self.state.finger[i], self.state.id, id):
+          return self.state.finger[i]
     return self.state.id
 
   def stabilize(self):
@@ -131,7 +138,9 @@ class Worker(Thread):
       x = Address(x_ip, x_port)
       if in_range(x.__hash__(), self.state.id, self.state.successor.__hash__()):
         self.state.lock.acquire()
+        self.state.finger[0] = x.__hash__()
         self.state.successor = x
+        self.state.addr_dict[str(x.__hash__())] = x
         self.state.lock.release()
     except: pass
     self.send(self.state.successor, 'notify {} {}'.format(self.state.ip, self.state.port)).close()
@@ -149,12 +158,13 @@ class Worker(Thread):
     self.state.i = self.state.i + 1
     if self.state.i > M:
       self.state.i = 1
-    s = self.send(self.state.local_address, 'find_successor {}'.format((self.state.id + pow(2, self.state.i-1)) % M))
+    s = self.send(self.state.local_address, 'find_successor {}'.format((self.state.id + pow(2, self.state.i-1)) % 2**M))
     n_ip, n_port = s.recv(1024).decode('utf-8').split(':')
     n = Address(n_ip, n_port)
     s.close()
     self.state.addr_dict[str(n.__hash__())] = n
-    self.state.finger[self.state.i] = n.__hash__()
+    self.state.finger[self.state.i-1] = n.__hash__()
+    print("Finger:", self.state.finger)
     self.state.lock.release()
 
   def check_predecessor(self):
@@ -167,9 +177,98 @@ class Worker(Thread):
     except:
       print("Failed to get response from predecessor")
       self.state.predecessor = None
-      
 
-  def distribute(self, file):
-    pass
+  def return_segment(self, seg_name):
+    seg_size = os.stat('{}/{}'.format(CACHE_DIR, seg_name)).st_size
+    self.conn.sendall(str(seg_size).encode())
+    ready = self.conn.recv(1024).decode('utf-8')
+    print(ready)
+    if ready == 'READY':
+      f = open('{}/{}'.format(CACHE_DIR, seg_name), 'rb')
+      # print(f)
+      self.conn.sendfile(f, offset=0, count=seg_size)
+    
+
+      
+  def store(self, seg_name, n_bytes):
+    self.conn.sendall('OK'.encode())
+    chunk = 0
+    data = self.conn.recv(8 * 1024)
+    while True:
+      data += self.conn.recv(8 * 1024)
+      chunk = len(data)
+      if chunk == int(n_bytes):
+        break
+    print('file recieved')
+    self.conn.sendall(str(len(data)).encode())
+    print('writing file')
+    f = open('{}/{}'.format(CACHE_DIR, seg_name), 'wb+')
+    f.write(data)
+    print('file written')
+    f.close()
+
+  def get_finger(self):
+    return str(self.state.finger)
+
+  def send_segment(self, file_, seg_id, start, n_bytes):
+    seg_name = '{}_{}'.format(file_.split('/')[-1:][0], seg_id)
+    ip, port = self.find_successor(hash_(seg_name)).split(':')
+    s = self.send(Address(ip, port), 'store {} {}'.format(seg_name, n_bytes))
+    if s.recv(512).decode('utf-8') == 'OK':
+      f = open(file_, 'rb+')
+      print("sending file...")
+      s.sendfile(f, int(start), int(n_bytes))
+      print("waiting for ack...")
+      data = s.recv(1024).decode('utf-8')
+      print('ack received')
+      s.close()
+      f.close()
+      return 'segment {}: {} bytes sent, {} recieved'.format(seg_id, n_bytes, data)
+    else:
+      s.close()
+      return 'Error sending segment {} to {}:{}'.format(seg_id, ip, port)
+
+  def pull(self, file_):
+    f = open(file_, 'r')
+    file_meta = []
+    for line in f:
+      file_meta.append(line)
+    f.close()
+    name = file_meta[0].replace('\n', '')
+    size = int(file_meta[1].replace('\n', ''))
+    n_segments = int(file_meta[2].replace('\n', ''))
+    data = ''.encode()
+    chunk = ''.encode()
+    for i in range(0, n_segments):
+      seg_name = name + '_' + str(i)
+      ip, port = self.find_successor(hash_(seg_name)).split(':')
+      s = self.send(Address(ip, port), 'return_segment {}'.format(seg_name))
+      seg_size = int(s.recv(1024).decode('utf-8'))
+      print('seg_size:', seg_size)
+      s.sendall('READY'.encode())
+      # chunk = s.recv(seg_size)
+      # ========= Chunked download downloading extra bytes; 1 byte at time too slow ========#
+      while True:
+        # print(len(data))
+        chunk += s.recv(1)
+        # chunk += s.recv(8 * 1024)
+        if len(chunk) >= seg_size:
+          break
+      #====================================================================================#
+      data += chunk
+      print('{}: {}/{} bytes recieved'.format(seg_name, len(chunk), seg_size))
+      chunk = b''
+      # chunk = len(data)
+      s.close()
+    
+    if len(data) == size:
+      f = open(name, 'wb+')
+      f.write(data)
+      f.close()
+      return 'File pulled successfully'
+    else:
+      return 'Failed to pull file'
+    # print(file_meta)
+    
 
 
