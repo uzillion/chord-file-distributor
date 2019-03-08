@@ -1,7 +1,7 @@
 import socket
 from address import Address
 from threading import Lock
-from config import M
+from utils import M
 
 class State:
   def __init__(self, port=8000):

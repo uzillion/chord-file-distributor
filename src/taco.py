@@ -1,31 +1,21 @@
 #!/usr/local/bin/python
-import subprocess
 import os
 import sys
 import socket
 import math
-import hashlib as h
 from address import Address
-from state import M
-# from address import Address
-
-def get_hash(str_):
-    return int(h.sha1(str_.encode()).hexdigest(), 16) % (2**M)
+from address import hash_
+from utils import checksum
 
 LOCAL_IP = socket.gethostbyname(socket.gethostname())
 LOCAL_PORT = int(os.environ['PORT'])
 print('For {}:{}'.format(LOCAL_IP, LOCAL_PORT))
 
-if not os.path.isfile('./split'):
-  subprocess.run(['make', 'all'])
-
 s = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
 
 try:
   request = sys.argv[1]
-  # LOCAL_PORT = int(sys.argv[2])
   args  = sys.argv[2:]
-  # print(len(args))
 except:
   request = ""
 
@@ -68,7 +58,10 @@ if request == 'join':
   if len(args) > 1:
     local_request('join', args[0], args[1])
   elif len(args) == 0:
-    local_request_s('create_ring')
+    print('USAGE: join <peer ip> <peer port>')
+
+elif request == 'create_ring':
+  local_request_s('create_ring')
 
 elif request == 'stabilize':
   if len(args) > 1:
@@ -91,9 +84,11 @@ elif request == 'pull':
     print('USAGE: pull <td file>')
 
 elif request == 'disperse':
-  if len(args) >= 2:
-    file_ = args[0]
-    pfile_ = file_.split('/')[-1:][0]
+  if len(args) >= 1:
+    if len(args) == 1:
+      args.insert(1, '1')
+    file_ = args[0] # File path
+    pfile_ = file_.split('/')[-1:][0] # File name
     n_segments = int(args[1])
     size = os.stat(file_).st_size
     segment_size = math.floor(size/n_segments)
@@ -105,10 +100,10 @@ elif request == 'disperse':
       if i >= n_segments-1:
         n_bytes = size - start
       sock.sendall('send_segment {} {} {} {}'.format(file_, i, start, n_bytes).encode())
-      print('{}/{}'.format(sock.recv(1024).decode('utf-8'), get_hash(pfile_+'_'+str(i))))
+      print('{}/{}'.format(sock.recv(1024).decode('utf-8'), hash_(pfile_+'_'+str(i))))
       sock.close()
     f = open('./{}.td'.format(pfile_), 'w')
-    f.write('{}\n{}\n{}\n'.format(pfile_, size, n_segments))
+    f.write('{}\n{}\n{}\n{}\n'.format(pfile_, size, n_segments, checksum(file_)))
     f.close()
     print('File distributed successfully')
   else:
@@ -121,12 +116,6 @@ elif request == 'ping':
   elif len(args) == 0:  
     local_request_s('ping')
 
-# elif request == 'get_hash':
-#   if len(args) > 1:
-#     print(Address(args[0], args[1]).__hash__())
-#   elif len(args) == 0:  
-#     print(Address(LOCAL_IP, LOCAL_PORT).__hash__())
-
 elif request[:4] == 'get_':
   if len(args) > 1:
     remote_request_s(request, args[0], args[1])
@@ -136,7 +125,8 @@ elif request[:4] == 'get_':
 else:
   print("Invalid Request, please select one of the following:")
   print("\t-> ping [<ip> <port>]")
-  print("\t-> join [<ip> <port>]")
+  print("\t-> create_ring")  
+  print("\t-> join <peer ip> <peer port>")
   print("\t-> disperse <file> <number of segments>")
   print("\t-> pull <td file>")
   print("\t-> stabilize")

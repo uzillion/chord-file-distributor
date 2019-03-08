@@ -1,5 +1,5 @@
 import hashlib as h
-from config import hash_funcs, main_func
+from utils import hash_funcs, main_func
 
 hash_ = hash_funcs[main_func]
 class Address(object):
