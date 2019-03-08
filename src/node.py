@@ -1,6 +1,7 @@
 #!/usr/local/bin/python
 import socket
 from worker import Worker
+from maintenance import Maintenance
 from state import State
 import sys
 import os
@@ -23,11 +24,15 @@ class Node:
     s.bind((state_.ip, port))
     s.listen()
     print('Listening on {}:{}'.format(state_.ip, port))
+
+    # Start maintenance thread.
+    Maintenance(Worker([None,None], state_)).start()
+
     while True:
       peer = s.accept()
       Worker(peer, state_).start()
-      
-    
+
+
     s.close()
 
 if __name__ == "__main__":
