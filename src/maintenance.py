@@ -9,8 +9,8 @@ class Maintenance(Thread):
 
     def run(self):
         while True:
-            # print("I am maintenance thread.", flush=True)
-            self.worker.stabilize()
-            self.worker.fix_finger()
-            self.worker.check_predecessor()
+            if self.worker.state.in_ring:
+                self.worker.stabilize()
+                self.worker.fix_finger()
+                self.worker.check_predecessor()
             time.sleep(self.sleep_time)
