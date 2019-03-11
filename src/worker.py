@@ -70,8 +70,8 @@ class Worker(Thread):
 
   def create_ring(self):
     self.state.successor = self.state.local_address
-    # self.state.predecessor = self.state.local_address
-    self.state.finger[0] = self.state.id
+    self.state.predecessor = self.state.local_address
+    self.state.finger = [self.state.id] * M
     self.state.addr_dict[str(self.state.finger[0])] = self.state.local_address
     self.state.in_ring = True
     return "New ring created"
@@ -183,6 +183,11 @@ class Worker(Thread):
     self.state.lock.release()
 
   def check_predecessor(self):
+    # Don't ping predecessor if this node is its own predecessor.
+    if self.state.predecessor != None \
+      and self.state.predecessor.__hash__() == self.state.id:
+      return
+
     try:
       s = send(self.state.predecessor, 'ping')
       response = s.recv(1024)
