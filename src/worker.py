@@ -9,6 +9,8 @@ import os
 
 CACHE_DIR = './cache'
 
+# Returns True if @a is between @b and @c.
+# @start and @end are used to indicate closed vs open boundaries.
 def in_range(a, b, c, start=False, end=False):
   bla = None
   alc = None
@@ -68,13 +70,15 @@ class Worker(Thread):
 
   def create_ring(self):
     self.state.successor = self.state.local_address
-    # self.state.predecessor = self.state.local_address
-    self.state.finger[0] = self.state.id
+    self.state.predecessor = self.state.local_address
+    self.state.finger = [self.state.id] * M
     self.state.addr_dict[str(self.state.finger[0])] = self.state.local_address
+    self.state.in_ring = True
     return "New ring created"
 
   def join(self, ip, port):
     print('joining {}:{}'.format(ip, port))
+    self.state.in_ring = True
     try:
       s = self.send(Address(ip, port), 'find_successor {}'.format(self.state.id))
       data = s.recv(1024).decode('utf-8')
@@ -96,7 +100,10 @@ class Worker(Thread):
       # print(e)
 
   def get_successor(self):
-    return '{}:{}'.format(self.state.successor.ip, self.state.successor.port)
+    try:
+      return '{}:{}'.format(self.state.successor.ip, self.state.successor.port)
+    except:
+      return 'None'
 
   def get_predecessor(self):
     try:
@@ -109,13 +116,19 @@ class Worker(Thread):
       return str(hash_(str))
     return str(self.state.id)
 
+  # Finds successor node (ip,port) of given id.
   def find_successor(self, id):
     id = int(id)
+    # If id is before the first finger node, then that
+    # finger node must be the successor.
     if in_range(id, self.state.id, self.state.finger[0], end=True):
       n_ = self.state.finger[0]
       n_ip = self.state.addr_dict[str(n_)].ip
       n_port = self.state.addr_dict[str(n_)].port
       return '{}:{}'.format(n_ip, n_port)
+    # Otherwise, find the node that most closely precedes
+    # the given id; that node's successor must be the
+    # successor of the given id.
     else:
       n_ = self.closest_preceding_node(id)
       n_ip = self.state.addr_dict[str(n_)].ip
@@ -170,6 +183,11 @@ class Worker(Thread):
     self.state.lock.release()
 
   def check_predecessor(self):
+    # Don't ping predecessor if this node is its own predecessor.
+    if self.state.predecessor != None \
+      and self.state.predecessor.__hash__() == self.state.id:
+      return
+
     try:
       s = send(self.state.predecessor, 'ping')
       response = s.recv(1024)
