@@ -19,14 +19,13 @@ class Node:
   def start(port=8000):
     os.environ['PORT'] = str(port)
     state_ = State(port)
-    # subprocess.run(['', 'export', 'IP={}'.format(state_.ip)])
     s = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
     s.bind((state_.ip, port))
     s.listen()
     print('Listening on {}:{}'.format(state_.ip, port))
 
     # Start maintenance thread.
-    Maintenance(Worker([None,None], state_)).start()
+    Maintenance(Worker([None,None], state_, False)).start()
 
     while True:
       peer = s.accept()

@@ -5,10 +5,18 @@ import socket
 import math
 from address import Address
 from address import hash_
-from utils import checksum
+from utils import checksum, CACHE_DIR
+
+if not os.path.isdir(CACHE_DIR):
+  os.mkdir(CACHE_DIR)
 
 LOCAL_IP = socket.gethostbyname(socket.gethostname())
-LOCAL_PORT = int(os.environ['PORT'])
+try:
+  LOCAL_PORT = int(os.environ['PORT'])
+except:
+  print('Error: PORT environment variable not set.')
+  sys.exit(1)
+
 print('For {}:{}'.format(LOCAL_IP, LOCAL_PORT))
 
 s = socket.socket(socket.AF_INET, socket.SOCK_STREAM)

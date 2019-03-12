@@ -1,6 +1,9 @@
 import hashlib as h
+CACHE_DIR = './cache'
 M = 20
 main_func = 'sha512'
+default_sleep_time = 3
+default_chunk_size = 8 * 1024
 
 def checksum(file_):
   hash_md5 = h.md5()
