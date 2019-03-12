@@ -1,6 +1,7 @@
 import hashlib as h
 M = 20
 main_func = 'sha512'
+default_sleep_time = 1
 
 def checksum(file_):
   hash_md5 = h.md5()

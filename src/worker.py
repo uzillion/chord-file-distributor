@@ -70,15 +70,14 @@ class Worker(Thread):
 
   def create_ring(self):
     self.state.successor = self.state.local_address
-    self.state.predecessor = self.state.local_address
-    self.state.finger = [self.state.id] * M
+    # self.state.predecessor = self.state.local_address
+    self.state.finger[0] = self.state.id
     self.state.addr_dict[str(self.state.finger[0])] = self.state.local_address
     self.state.in_ring = True
     return "New ring created"
 
   def join(self, ip, port):
     print('joining {}:{}'.format(ip, port))
-    self.state.in_ring = True
     try:
       s = self.send(Address(ip, port), 'find_successor {}'.format(self.state.id))
       data = s.recv(1024).decode('utf-8')
@@ -87,6 +86,7 @@ class Worker(Thread):
       self.state.successor = Address(successor_ip, successor_port)
       self.state.finger[0] = self.state.successor.__hash__()
       self.state.addr_dict[str(self.state.finger[0])] = self.state.successor
+      self.state.in_ring = True
       self.state.lock.release()
       s.close()
       self.stabilize()
@@ -95,15 +95,54 @@ class Worker(Thread):
       return 'successor found to be {}:{}'.format(successor_ip, successor_port)
     except:
       raise Exception()
-    finally:
       return "Error sending request to server"
-      # print(e)
+
+  def stabilize(self):
+    try:
+      s = self.send(self.state.successor, 'get_predecessor')
+      resp = s.recv(1024).decode('utf-8')
+      if resp != 'None':
+        x_ip, x_port = resp.split(':')
+        x = Address(x_ip, x_port)
+        s.close()
+        if in_range(x.__hash__(), self.state.id, self.state.successor.__hash__()):
+          self.state.lock.acquire()
+          self.state.finger[0] = x.__hash__()
+          self.state.successor = x
+          self.state.addr_dict[str(x.__hash__())] = x
+          self.state.lock.release()
+      self.send(self.state.successor, 'notify {} {}'.format(self.state.ip, self.state.port)).close()
+      # else:
+    except:
+      raise Exception()
+
+  def notify(self, ip, port):
+    n_ = Address(ip, port)
+    if self.state.predecessor == None or\
+       in_range(n_.__hash__(), self.state.predecessor.__hash__(), self.state.id):
+      self.state.lock.acquire()      
+      self.state.predecessor = n_
+      self.state.lock.release()   
+
+  def fix_finger(self):
+    self.state.lock.acquire()
+    self.state.i = self.state.i + 1
+    if self.state.i > M:
+      self.state.i = 1
+    s = self.send(self.state.local_address, 'find_successor {}'.format((self.state.id + pow(2, self.state.i-1)) % 2**M))
+    n_ip, n_port = s.recv(1024).decode('utf-8').split(':')
+    n = Address(n_ip, n_port)
+    s.close()
+    self.state.addr_dict[str(n.__hash__())] = n
+    self.state.finger[self.state.i-1] = n.__hash__()
+    print("Finger:", self.state.finger)
+    self.state.lock.release()
 
   def get_successor(self):
-    try:
-      return '{}:{}'.format(self.state.successor.ip, self.state.successor.port)
-    except:
-      return 'None'
+    # try:
+    return '{}:{}'.format(self.state.successor.ip, self.state.successor.port)
+    # except:
+      # return 'None'
 
   def get_predecessor(self):
     try:
@@ -145,58 +184,26 @@ class Worker(Thread):
           return self.state.finger[i]
     return self.state.id
 
-  def stabilize(self):
-    try:
-      s = self.send(self.state.successor, 'get_predecessor')
-      x_ip, x_port = s.recv(1024).decode('utf-8').split(':')
-      s.close()
-      x = Address(x_ip, x_port)
-      if in_range(x.__hash__(), self.state.id, self.state.successor.__hash__()):
-        self.state.lock.acquire()
-        self.state.finger[0] = x.__hash__()
-        self.state.successor = x
-        self.state.addr_dict[str(x.__hash__())] = x
-        self.state.lock.release()
-    except: pass
-    self.send(self.state.successor, 'notify {} {}'.format(self.state.ip, self.state.port)).close()
-
-  def notify(self, ip, port):
-    n_ = Address(ip, port)
-    if self.state.predecessor == None or\
-       in_range(n_.__hash__(), self.state.predecessor.__hash__(), self.state.id):
-      self.state.lock.acquire()      
-      self.state.predecessor = n_
-      self.state.lock.release()   
-
-  def fix_finger(self):
-    self.state.lock.acquire()
-    self.state.i = self.state.i + 1
-    if self.state.i > M:
-      self.state.i = 1
-    s = self.send(self.state.local_address, 'find_successor {}'.format((self.state.id + pow(2, self.state.i-1)) % 2**M))
-    n_ip, n_port = s.recv(1024).decode('utf-8').split(':')
-    n = Address(n_ip, n_port)
-    s.close()
-    self.state.addr_dict[str(n.__hash__())] = n
-    self.state.finger[self.state.i-1] = n.__hash__()
-    print("Finger:", self.state.finger)
-    self.state.lock.release()
-
   def check_predecessor(self):
     # Don't ping predecessor if this node is its own predecessor.
-    if self.state.predecessor != None \
-      and self.state.predecessor.__hash__() == self.state.id:
-      return
-
-    try:
-      s = send(self.state.predecessor, 'ping')
-      response = s.recv(1024)
-      if not response[:7] == 'Running':
+    # if self.state.predecessor != None \
+      # and self.state.predecessor.__hash__() == self.state.id:
+      # return
+    if self.state.predecessor != None:
+      try:
+        s = self.send(self.state.predecessor, 'ping')
+        response = s.recv(1024)
+        # print(response[:7])
+        if not response[:7] == b'Running':
+          print("Failed to get response from predecessor")
+          self.state.predecessor = None
+        else:
+          pass
+          # print('Predecessor is live')
+      except:
+        raise Exception()
         print("Failed to get response from predecessor")
         self.state.predecessor = None
-    except:
-      print("Failed to get response from predecessor")
-      self.state.predecessor = None
 
   def return_segment(self, seg_name):
     seg_size = os.stat('{}/{}'.format(CACHE_DIR, seg_name)).st_size

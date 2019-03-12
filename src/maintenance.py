@@ -1,8 +1,9 @@
 from threading import Thread
 import time
+from utils import default_sleep_time
 
 class Maintenance(Thread):
-    def __init__(self, worker, sleep_time=3):
+    def __init__(self, worker, sleep_time=default_sleep_time):
         super().__init__()
         self.worker = worker
         self.sleep_time = sleep_time  # do maintenance every @sleep_time seconds

@@ -15,6 +15,8 @@ WORKDIR /app
 # Copy the current directory contents into the container at /app
 COPY ./src /app
 
+RUN chmod +x ./taco.py
+
 ENV PORT 8000
 
 # Run app.py when the container launches
