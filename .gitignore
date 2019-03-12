@@ -3,7 +3,8 @@ split
 cache/
 .todo
 *.td
-src/test*
+test*.*
+test_files/
 
 ### Python ###
 __pycache__/

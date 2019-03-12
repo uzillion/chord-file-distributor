@@ -1,13 +1,15 @@
 from threading import Thread
 from address import Address, hash_
-from utils import M, checksum
+from utils import M, checksum, CACHE_DIR
 import socket
 import sys
 import time
 import hashlib as h
 import os
 
-CACHE_DIR = './cache'
+def debug(obj, str_):
+  if obj.verbose:
+    print(str_)
 
 # Returns True if @a is between @b and @c.
 # @start and @end are used to indicate closed vs open boundaries.
@@ -29,18 +31,18 @@ def in_range(a, b, c, start=False, end=False):
   return bla or alc
 
 class Worker(Thread):
-  def __init__(self, peer, state):
+  def __init__(self, peer, state, verbose=True):
     super().__init__()
     self.conn = peer[0]
     self.peer_addr = peer[1]
     self.state = state
-
+    self.verbose = verbose
   
   def run(self):
     data = self.conn.recv(1024)
     # print(data)
     request = data.decode('utf-8').split(' ')
-    print(request)
+    debug(self, request)
     if request[0] == 'exit':
       # self.conn.sendall('Exiti')
       sys.exit(0)
@@ -65,7 +67,7 @@ class Worker(Thread):
     return s
 
   def ping(self):
-    print('ping called')
+    debug(self, 'ping called')
     return 'Running on {}:{}'.format(self.state.ip, self.state.port)
 
   def create_ring(self):
@@ -135,7 +137,7 @@ class Worker(Thread):
     s.close()
     self.state.addr_dict[str(n.__hash__())] = n
     self.state.finger[self.state.i-1] = n.__hash__()
-    print("Finger:", self.state.finger)
+    # debug(self, "Finger:", self.state.finger)
     self.state.lock.release()
 
   def get_successor(self):
@@ -193,7 +195,7 @@ class Worker(Thread):
       try:
         s = self.send(self.state.predecessor, 'ping')
         response = s.recv(1024)
-        # print(response[:7])
+        # debug(self, response[:7])
         if not response[:7] == b'Running':
           print("Failed to get response from predecessor")
           self.state.predecessor = None
@@ -218,11 +220,13 @@ class Worker(Thread):
 
       
   def store(self, seg_name, n_bytes):
+    if not os.path.isdir(CACHE_DIR):
+      os.mkdir(CACHE_DIR)
     self.conn.sendall('OK'.encode())
     chunk = 0
     data = self.conn.recv(8 * 1024)
     while True:
-      data += self.conn.recv(8 * 1024)
+      data += self.conn.recv(int(n_bytes))
       chunk = len(data)
       if chunk == int(n_bytes):
         break
@@ -274,8 +278,9 @@ class Worker(Thread):
       seg_size = int(s.recv(1024).decode('utf-8'))
       print('seg_size:', seg_size)
       s.sendall('READY'.encode())
+      # chunk = s.recv(seg_size)
       while True:
-        chunk += s.recv(8 * 1024)
+        chunk += s.recv(seg_size)
         if len(chunk) >= seg_size:
           break
       data += chunk
