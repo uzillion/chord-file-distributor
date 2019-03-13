@@ -90,10 +90,10 @@ Files are retrieved using `pull` command and the `.td` file corresponding to the
 
 ## Other Commands
 Other commands you might use for various purposes can be found by typing `./taco help`. You can find a few below:
-* get_hash: Get the hashed value/position of the node on the ring.
-* get_successor: Get the IP and PORT of the immediate successor on the ring.
-* get_finger: Get finger table of the node that has a list of successors at exponentially growing distances.
-* get_predecessor: Get the IP and PORT of the immediate predecessor on the ring.
+* `get_hash`: Get the hashed value/position of the node on the ring.
+* `get_successor`: Get the IP and PORT of the immediate successor on the ring.
+* `get_finger`: Get finger table of the node that has a list of successors at exponentially growing distances.
+* `get_predecessor`: Get the IP and PORT of the immediate predecessor on the ring.
 
 ## Advanced
 The [utils.py](src/utils.py) file has the value of M that decides the number of buckets on the ring, and the various hash functions that can be used for the hashing of files and the nodes. Choosing of appropriate hash functions and M is vital for ideal working of Chord, and may have to chage depending on what the application is being used for. The chosen hash function can be changed by changing the value of `main_func` variable to the name of the available function in the dictionary.
