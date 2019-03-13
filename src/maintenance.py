@@ -11,9 +11,7 @@ class Maintenance(Thread):
     def run(self):
         while True:
             if self.worker.state.in_ring:
-                # try:
                 self.worker.check_predecessor()
                 self.worker.stabilize()
                 self.worker.fix_finger()
-                # except: pass
             time.sleep(self.sleep_time)

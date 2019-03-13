@@ -74,12 +74,15 @@ class Worker(Thread):
     self.state.successor = self.state.local_address
     # self.state.predecessor = self.state.local_address
     self.state.finger[0] = self.state.id
-    self.state.addr_dict[str(self.state.finger[0])] = self.state.local_address
+    self.state.addr_dict[str(self.state.id)] = self.state.local_address
     self.state.in_ring = True
     return "New ring created"
 
   def join(self, ip, port):
     print('joining {}:{}'.format(ip, port))
+    self.state.lock.acquire()
+    self.state.addr_dict[str(self.state.id)] = self.state.local_address
+    self.state.lock.release()
     try:
       s = self.send(Address(ip, port), 'find_successor {}'.format(self.state.id))
       data = s.recv(1024).decode('utf-8')
@@ -95,10 +98,10 @@ class Worker(Thread):
       # self.state.predecessor = Address(successor_ip, successor_port)
       # self.send(self.state.predecessor, 'stabilize').close()
       return 'successor found to be {}:{}'.format(successor_ip, successor_port)
-    except:
-      raise
+    except Exception as e:
+      print(e.__traceback__)
       return "Error sending request to server"
-    finally:
+    # finally:
 
   def stabilize(self):
     try:
@@ -114,10 +117,16 @@ class Worker(Thread):
           self.state.successor = x
           self.state.addr_dict[str(x.__hash__())] = x
           self.state.lock.release()
-      self.send(self.state.successor, 'notify {} {}'.format(self.state.ip, self.state.port)).close()
       # else:
     except:
-      raise
+      self.state.lock.acquire()
+      del self.state.addr_dict[str(self.state.successor.__hash__())]
+      self.state.successor = self.state.local_address
+      self.state.finger[0] = self.state.id
+      self.state.lock.release()
+
+
+    self.send(self.state.successor, 'notify {} {}'.format(self.state.ip, self.state.port)).close()
 
   def notify(self, ip, port):
     n_ = Address(ip, port)
@@ -204,9 +213,12 @@ class Worker(Thread):
           pass
           # print('Predecessor is live')
       except:
+        self.state.lock.acquire()
+        del self.state.addr_dict[str(self.state.predecessor.__hash__())]
         self.state.predecessor = None
+        self.state.lock.release()
         print("Failed to get response from predecessor")
-        raise
+        # raise
 
   def return_segment(self, seg_name):
     seg_size = os.stat('{}/{}'.format(CACHE_DIR, seg_name)).st_size
