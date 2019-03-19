@@ -30,6 +30,18 @@ def in_range(a, b, c, start=False, end=False):
 	  return bla and alc
   return bla or alc
 
+
+def get_segment(s, data_array, seg_name, seg_size, i):
+  chunk = b''
+  while True:
+    chunk += s.recv(seg_size)
+    if len(chunk) >= seg_size:
+      break
+  data_array[i] = chunk
+  print('{}: {}/{} bytes recieved'.format(seg_name, len(chunk), seg_size))
+  # chunk = len(data)
+  s.close()
+
 class Worker(Thread):
   def __init__(self, peer, state, verbose=True):
     super().__init__()
@@ -232,12 +244,13 @@ class Worker(Thread):
     return '#SKIP'   
 
       
-  def store(self, seg_name, n_bytes, replica=0):
+  def store(self, seg_name, n_bytes, replica=1):
     if not os.path.isdir(CACHE_DIR):
       os.mkdir(CACHE_DIR)
     self.conn.sendall('OK'.encode())
     chunk = 0
-    data = self.conn.recv(8 * 1024)
+    data = b''
+    # data = self.conn.recv(8 * 1024)
     while True:
       data += self.conn.recv(int(n_bytes))
       chunk = len(data)
@@ -295,7 +308,9 @@ class Worker(Thread):
     n_segments = int(file_meta[2].replace('\n', ''))
     checksum_ = file_meta[3].replace('\n', '')
     data = ''.encode()
-    chunk = ''.encode()
+    # chunk = ''.encode()
+    threads = []
+    data_array = [None]*n_segments
     for i in range(0, n_segments):
       seg_name = name + '_' + str(i)
       ip, port = self.find_successor(hash_(seg_name)).split(':')
@@ -304,16 +319,21 @@ class Worker(Thread):
       print('seg_size:', seg_size)
       s.sendall('READY'.encode())
       # chunk = s.recv(seg_size)
-      while True:
-        chunk += s.recv(seg_size)
-        if len(chunk) >= seg_size:
-          break
-      data += chunk
-      print('{}: {}/{} bytes recieved'.format(seg_name, len(chunk), seg_size))
-      chunk = b''
-      # chunk = len(data)
-      s.close()
-    
+      t = Thread(target=get_segment, args=(s, data_array, seg_name, seg_size, i))
+      threads.append(t)
+      # while True:
+      #   chunk += s.recv(seg_size)
+      #   if len(chunk) >= seg_size:
+      #     break
+      # data += chunk
+      # print('{}: {}/{} bytes recieved'.format(seg_name, len(chunk), seg_size))
+      # chunk = b''
+      # # chunk = len(data)
+      # s.close()
+    for th in threads:
+      th.join()
+    for b in data_array:
+      data += b
     f = open(name, 'wb+')
     f.write(data)
     f.close()
