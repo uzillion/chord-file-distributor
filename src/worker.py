@@ -35,6 +35,7 @@ def get_segment(s, data_array, seg_name, seg_size, i):
   chunk = b''
   while True:
     chunk += s.recv(seg_size)
+    # chunk += s.recv(8*1024)
     if len(chunk) >= seg_size:
       break
   data_array[i] = chunk
@@ -193,6 +194,7 @@ class Worker(Thread):
     # the given id; that node's successor must be the
     # successor of the given id.
     else:
+      # n_ = self.state.successor.__hash__()
       n_ = self.closest_preceding_node(id)
       n_ip = self.state.addr_dict[str(n_)].ip
       n_port = self.state.addr_dict[str(n_)].port
@@ -244,7 +246,7 @@ class Worker(Thread):
     return '#SKIP'   
 
       
-  def store(self, seg_name, n_bytes, replica=1):
+  def store(self, seg_name, n_bytes, replica=0):
     if not os.path.isdir(CACHE_DIR):
       os.mkdir(CACHE_DIR)
     self.conn.sendall('OK'.encode())
@@ -253,6 +255,7 @@ class Worker(Thread):
     # data = self.conn.recv(8 * 1024)
     while True:
       data += self.conn.recv(int(n_bytes))
+      # data += self.conn.recv(8*1024)
       chunk = len(data)
       if chunk == int(n_bytes):
         break
@@ -320,6 +323,7 @@ class Worker(Thread):
       s.sendall('READY'.encode())
       # chunk = s.recv(seg_size)
       t = Thread(target=get_segment, args=(s, data_array, seg_name, seg_size, i))
+      t.start()
       threads.append(t)
       # while True:
       #   chunk += s.recv(seg_size)
